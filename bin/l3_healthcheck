@@ -216,6 +216,12 @@ class L3HealthcheckAgent(db_base_plugin_v2.NeutronDbPluginV2,
                     if not lck:
                         continue
 
+                    if not self.check_active_agents(context):
+                        LOG.debug("Found no active agents. Abort auto "
+                                  "migration to prevent unexpected changes")
+                        self.unlock(context)
+                        return
+
                     self.update_agent(self.context, agent['id'],
                                       {'agent': {'admin_state_up': False}})
 
@@ -248,6 +254,15 @@ class L3HealthcheckAgent(db_base_plugin_v2.NeutronDbPluginV2,
                     self.exec_post_script()
 
                     self.unlock(context)
+
+    def check_active_agents(self, context):
+        agents = self.get_agents(self.context)
+        for agent in agents:
+            if (agent['agent_type'] == constants.AGENT_TYPE_L3 and
+                    agent['admin_state_up']):
+                if not agents_db.AgentDbMixin.is_agent_down(
+                        agent['heartbeat_timestamp']):
+                    return True
 
 
 class L3healthcheckManager(periodic_task.PeriodicTasks):
